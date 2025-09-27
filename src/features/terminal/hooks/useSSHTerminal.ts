@@ -4,9 +4,9 @@ import { FitAddon } from '@xterm/addon-fit';
 import { SocketService } from '@/infrastructure/socket/SocketService';
 import type { 
   LoginCredentials, 
-  ConnectionStage, 
-  TerminalSize,
-  SSHError,
+  ConnectionStage
+} from '@/shared/types';
+import { 
   ConnectionError,
   AuthenticationError 
 } from '@/shared/types';
@@ -227,8 +227,7 @@ export function useSSHTerminal(): UseSSHTerminalReturn {
       theme: {
         background: '#1a1a1a',
         foreground: '#ffffff',
-        cursor: '#ffffff',
-        selection: '#ffffff33'
+        cursor: '#ffffff'
       },
       fontFamily: 'Consolas, "Courier New", monospace',
       fontSize: 14,

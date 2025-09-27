@@ -136,16 +136,16 @@ export class SocketService {
     if (!this.socket) {
       throw new Error('Socket not initialized');
     }
-    this.socket.on('reconnect', callback);
-    return () => this.socket?.off('reconnect', callback);
+    (this.socket as any).on('reconnect', callback);
+    return () => (this.socket as any)?.off('reconnect', callback);
   }
 
   onReconnectError(callback: (error: Error) => void): () => void {
     if (!this.socket) {
       throw new Error('Socket not initialized');
     }
-    this.socket.on('reconnect_error', callback);
-    return () => this.socket?.off('reconnect_error', callback);
+    (this.socket as any).on('reconnect_error', callback);
+    return () => (this.socket as any)?.off('reconnect_error', callback);
   }
 
   isConnected(): boolean {

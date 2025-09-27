@@ -15,7 +15,6 @@ export const ConnectionStatus: React.FC<ConnectionStatusProps> = ({
   stage,
   error,
   isConnecting,
-  isConnected,
   onDisconnect,
   onReset
 }) => {
