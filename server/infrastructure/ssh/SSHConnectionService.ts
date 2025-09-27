@@ -24,7 +24,7 @@ export class SSHConnectionService implements ISSHConnectionService {
       client.on('ready', () => {
         clearTimeout(timeout);
         
-        client.shell((err, stream) => {
+        client.shell((err: Error | undefined, stream: any) => {
           if (err) {
             client.end();
             reject(new Error(`Failed to create shell: ${err.message}`));
@@ -58,7 +58,7 @@ export class SSHConnectionService implements ISSHConnectionService {
         });
       });
 
-      client.on('error', (err) => {
+      client.on('error', (err: Error) => {
         clearTimeout(timeout);
         reject(new Error(`SSH connection failed: ${err.message}`));
       });

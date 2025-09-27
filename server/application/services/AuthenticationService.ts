@@ -84,7 +84,7 @@ export class AuthenticationService implements IAuthenticationService {
   }
 
   // Periodic cleanup method
-  startSessionCleanup(): NodeJS.Timer {
+  startSessionCleanup(): NodeJS.Timeout {
     // Run cleanup every hour
     return setInterval(() => {
       this.cleanupExpiredSessions();
