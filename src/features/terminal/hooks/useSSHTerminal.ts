@@ -79,8 +79,8 @@ export function useSSHTerminal(): UseSSHTerminalReturn {
       `▐█▪·•▐█▄█▌██▐█▌▐█▄▪▐█    ▐███▌▐█▌.▐▌██▐█▌▐█▄▪▐█▐█▌.▐▌▐█▌▐▌▐█▄▄▌ \r\n` +
       `.▀    ▀▀▀ ▀▀ █▪·▀▀▀▀     ·▀▀▀  ▀█▄▀▪▀▀ █▪ ▀▀▀▀  ▀█▄▀▪.▀▀▀  ▀▀▀  \r\n` +
       `SSH Terminal - React TypeScript Edition\r\n` +
-      `Please enter your credentials to access the remote server.\r\n\r\n` +
-      `Username: `;
+      `Please wait for the connection to SSH Server.\r\n\r\n` +
+      ` `;
     
     terminalRef.current.write(welcomeMsg);
   }, []);
