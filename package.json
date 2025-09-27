@@ -1,0 +1,53 @@
+{
+  "name": "ssh-terminal-react-ts",
+  "version": "1.0.0",
+  "description": "SSH Terminal Web Application built with React TypeScript and Clean Architecture",
+  "main": "server/index.js",
+  "scripts": {
+    "dev": "concurrently \"npm run server:dev\" \"npm run client:dev\"",
+    "client:dev": "vite",
+    "client:build": "tsc && vite build",
+    "client:preview": "vite preview",
+    "server:dev": "tsx watch server/index.ts",
+    "server:build": "tsc --project server/tsconfig.json",
+    "server:start": "node dist/server/index.js",
+    "build": "npm run client:build && npm run server:build",
+    "start": "npm run server:start",
+    "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
+    "lint:fix": "eslint . --ext ts,tsx --fix",
+    "type-check": "tsc --noEmit"
+  },
+  "keywords": ["ssh", "terminal", "react", "typescript", "clean-architecture", "xterm"],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "express": "^4.21.1",
+    "socket.io": "^4.8.1",
+    "ssh2": "^1.16.0",
+    "dotenv": "^16.4.5",
+    "cors": "^2.8.5",
+    "helmet": "^7.1.0"
+  },
+  "devDependencies": {
+    "@types/react": "^18.3.3",
+    "@types/react-dom": "^18.3.0",
+    "@types/node": "^20.14.5",
+    "@types/express": "^4.17.21",
+    "@types/cors": "^2.8.17",
+    "@typescript-eslint/eslint-plugin": "^7.13.1",
+    "@typescript-eslint/parser": "^7.13.1",
+    "@vitejs/plugin-react": "^4.3.1",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "typescript": "^5.2.2",
+    "vite": "^5.3.1",
+    "tsx": "^4.15.7",
+    "concurrently": "^8.2.2",
+    "eslint": "^8.57.0",
+    "eslint-plugin-react-hooks": "^4.6.2",
+    "eslint-plugin-react-refresh": "^0.4.7",
+    "@xterm/xterm": "^5.5.0",
+    "@xterm/addon-fit": "^0.10.0",
+    "socket.io-client": "^4.8.1"
+  }
+}

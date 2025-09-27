@@ -1,0 +1,121 @@
+.terminal-container {
+  position: relative;
+  width: 100vw;
+  height: 100vh;
+  background: #1a1a1a;
+  overflow: hidden;
+  font-family: 'Consolas', 'Courier New', monospace;
+}
+
+.terminal-display {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  padding: 10px;
+  background: #1a1a1a;
+  transition: filter 0.3s ease;
+}
+
+.terminal-blurred {
+  filter: blur(2px);
+  opacity: 0.7;
+}
+
+.terminal-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.8);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  backdrop-filter: blur(4px);
+}
+
+/* XTerm.js overrides */
+.terminal-display .xterm {
+  height: 100% !important;
+  width: 100% !important;
+}
+
+.terminal-display .xterm-screen {
+  height: 100% !important;
+}
+
+.terminal-display .xterm-viewport {
+  overflow-y: hidden !important;
+}
+
+/* Custom scrollbar for terminal */
+.terminal-display .xterm-viewport::-webkit-scrollbar {
+  width: 8px;
+}
+
+.terminal-display .xterm-viewport::-webkit-scrollbar-track {
+  background: #2a2a2a;
+}
+
+.terminal-display .xterm-viewport::-webkit-scrollbar-thumb {
+  background: #555;
+  border-radius: 4px;
+}
+
+.terminal-display .xterm-viewport::-webkit-scrollbar-thumb:hover {
+  background: #777;
+}
+
+/* Terminal focus styles */
+.terminal-container:focus {
+  outline: none;
+}
+
+.terminal-display .xterm-helper-textarea {
+  position: absolute;
+  left: -9999px;
+  top: -9999px;
+}
+
+/* Loading animation for terminal */
+@keyframes terminal-cursor {
+  0%, 50% { opacity: 1; }
+  51%, 100% { opacity: 0; }
+}
+
+.terminal-loading-cursor {
+  animation: terminal-cursor 1s infinite;
+}
+
+/* Mobile responsiveness */
+@media (max-width: 768px) {
+  .terminal-display {
+    padding: 5px;
+  }
+  
+  .terminal-display .xterm {
+    font-size: 12px;
+  }
+}
+
+/* High contrast mode support */
+@media (prefers-contrast: high) {
+  .terminal-display {
+    background: #000;
+  }
+}
+
+/* Reduced motion support */
+@media (prefers-reduced-motion: reduce) {
+  .terminal-display {
+    transition: none;
+  }
+  
+  .terminal-loading-cursor {
+    animation: none;
+    opacity: 1;
+  }
+}
