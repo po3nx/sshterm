@@ -41,8 +41,13 @@ export class SocketService {
 
       // When target is undefined, Socket.IO connects to the current origin at /socket.io,
       // which pairs with the Vite dev proxy and production same-origin setup.
+      // Allow forcing polling in dev via VITE_FORCE_POLLING=1 to diagnose WS issues
+      const forcePolling = (typeof window !== 'undefined' && typeof (import.meta as any) !== 'undefined' && (import.meta as any).env)
+        ? ((import.meta as any).env.VITE_FORCE_POLLING === '1')
+        : false;
+
       this.socket = io(target, {
-        transports: ['websocket', 'polling'],
+        transports: forcePolling ? ['polling'] : ['websocket', 'polling'],
         timeout: 10000,
         reconnection: true,
         reconnectionAttempts: 3,

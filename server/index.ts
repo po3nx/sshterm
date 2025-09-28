@@ -21,9 +21,14 @@ const app = express();
 const server = createServer(app);
 
 // Configure Socket.IO with CORS
+const allowedOrigins = (process.env.CLIENT_URL || "http://localhost:3000")
+  .split(',')
+  .map(o => o.trim())
+  .filter(Boolean);
+
 const io = new Server(server, {
   cors: {
-    origin: process.env.CLIENT_URL || "http://localhost:3000",
+    origin: allowedOrigins,
     methods: ["GET", "POST"],
     credentials: true
   },
@@ -47,9 +52,13 @@ app.use(helmet({
   }
 }));
 
-// CORS configuration
+// CORS configuration (supports comma-separated CLIENT_URL list)
 app.use(cors({
-  origin: process.env.CLIENT_URL || "http://localhost:3000",
+  origin: (origin, callback) => {
+    if (!origin) return callback(null, true); // Allow non-browser clients or same-origin
+    if (allowedOrigins.includes(origin)) return callback(null, true);
+    return callback(new Error(`CORS blocked for origin: ${origin}`));
+  },
   credentials: true
 }));
 
