@@ -1,7 +1,7 @@
 import { Socket } from 'socket.io';
 
 interface ThrottleRecord {
-  failures: number;
+  timestamps: number[]; // failure times (epoch ms)
   blockedUntil?: number; // epoch ms
 }
 
@@ -9,10 +9,12 @@ export class LoginThrottleService {
   private records = new Map<string, ThrottleRecord>();
   private readonly maxFailures: number;
   private readonly lockoutMs: number;
+  private readonly windowMs: number;
 
-  constructor(options?: { maxFailures?: number; lockoutMs?: number }) {
+  constructor(options?: { maxFailures?: number; lockoutMs?: number; windowMs?: number }) {
     this.maxFailures = options?.maxFailures ?? parseInt(process.env.MAX_LOGIN_FAILURES || '3', 10);
     this.lockoutMs = options?.lockoutMs ?? parseInt(process.env.LOGIN_LOCKOUT_MS || String(60 * 60 * 1000), 10); // 1 hour
+    this.windowMs = options?.windowMs ?? parseInt(process.env.LOGIN_WINDOW_MS || String(10 * 60 * 1000), 10); // 10 minutes
   }
 
   public getClientIp(socket: Socket): string {
@@ -39,30 +41,48 @@ export class LoginThrottleService {
     const k = this.key(ip, host);
     const rec = this.records.get(k);
     const now = Date.now();
-    if (rec?.blockedUntil && rec.blockedUntil > now) {
+
+    if (!rec) return { blocked: false, retryAfterMs: 0 };
+
+    // Honor active lockout
+    if (rec.blockedUntil && rec.blockedUntil > now) {
       return { blocked: true, retryAfterMs: rec.blockedUntil - now };
     }
+
+    // Purge old timestamps outside the window
+    rec.timestamps = rec.timestamps.filter(ts => now - ts <= this.windowMs);
+    if (rec.timestamps.length >= this.maxFailures) {
+      // If threshold is reached within the rolling window, enforce lockout
+      rec.blockedUntil = now + this.lockoutMs;
+      rec.timestamps = [];
+      this.records.set(k, rec);
+      return { blocked: true, retryAfterMs: this.lockoutMs };
+    }
+
+    // Update record with purged timestamps
+    this.records.set(k, rec);
     return { blocked: false, retryAfterMs: 0 };
   }
 
   public registerFailure(ip: string, host: string): void {
     const k = this.key(ip, host);
-    const rec = this.records.get(k) || { failures: 0 };
     const now = Date.now();
+    const rec = this.records.get(k) || { timestamps: [] };
 
-    // If still blocked, extend block (optional: keep as-is)
+    // If already blocked, extend block to discourage rapid retries during lockout
     if (rec.blockedUntil && rec.blockedUntil > now) {
-      // keep the longer of the two
       rec.blockedUntil = Math.max(rec.blockedUntil, now + this.lockoutMs);
       this.records.set(k, rec);
       return;
     }
 
-    rec.failures += 1;
+    // Add failure and purge old entries outside the window
+    rec.timestamps.push(now);
+    rec.timestamps = rec.timestamps.filter(ts => now - ts <= this.windowMs);
 
-    if (rec.failures >= this.maxFailures) {
+    if (rec.timestamps.length >= this.maxFailures) {
       rec.blockedUntil = now + this.lockoutMs;
-      rec.failures = 0; // reset failures after triggering lockout
+      rec.timestamps = []; // reset after applying penalty
     }
 
     this.records.set(k, rec);
