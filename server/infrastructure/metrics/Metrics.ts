@@ -73,6 +73,59 @@ class Metrics {
       next();
     };
   }
+
+  public async snapshot() {
+    const safeValue = (v: any, d = 0) => (typeof v === 'number' && isFinite(v) ? v : d);
+
+    // Gauges
+    const socketClients = this.socketConnectedClients.get();
+    const sshActive = this.sshActiveConnections.get();
+
+    // Counters
+    const sshFailures = this.sshConnectionFailuresTotal.get();
+    const sshLogin = this.sshLoginAttempts.get();
+
+    // HTTP counters
+    const httpReqs = this.httpRequestsTotal.get();
+    const httpDur = this.httpRequestDurationSeconds.get();
+
+    const sumHttpReqsByStatus: Record<string, number> = {};
+    for (const v of httpReqs.values) {
+      const status = (v.labels as any)?.status ?? 'unknown';
+      sumHttpReqsByStatus[status] = safeValue(sumHttpReqsByStatus[status], 0) + safeValue(v.value, 0);
+    }
+
+    const loginCounts: Record<string, number> = { attempt: 0, success: 0, failure: 0 };
+    for (const v of sshLogin.values) {
+      const result = (v.labels as any)?.result ?? 'unknown';
+      if (result in loginCounts) loginCounts[result] += safeValue(v.value, 0);
+    }
+
+    // Extract overall count/sum for duration histogram
+    let httpDurationCount = 0;
+    let httpDurationSum = 0;
+    for (const v of httpDur.values) {
+      if ((v.labels as any)?.le === undefined) {
+        // _count or _sum
+        if ((v as any).metricName?.endsWith('_count')) httpDurationCount = safeValue(v.value, 0);
+        if ((v as any).metricName?.endsWith('_sum')) httpDurationSum = safeValue(v.value, 0);
+      }
+    }
+
+    return {
+      socketConnectedClients: safeValue(socketClients.values?.[0]?.value, 0),
+      sshActiveConnections: safeValue(sshActive.values?.[0]?.value, 0),
+      sshConnectionFailuresTotal: safeValue(sshFailures.values?.[0]?.value, 0),
+      sshLoginAttempts: loginCounts,
+      httpRequestsTotalByStatus: sumHttpReqsByStatus,
+      httpRequestDuration: {
+        count: httpDurationCount,
+        sumSeconds: httpDurationSum,
+        avgSeconds: httpDurationCount > 0 ? httpDurationSum / httpDurationCount : 0,
+      },
+      timestamp: new Date().toISOString(),
+    };
+  }
 }
 
 export const metrics = new Metrics();

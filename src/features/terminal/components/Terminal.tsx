@@ -2,6 +2,7 @@ import React, { useEffect, useRef } from 'react';
 import { useSSHTerminal } from '../hooks/useSSHTerminal';
 import { ConnectionStatus } from './ConnectionStatus';
 import { LoginForm } from '@/features/auth/components/LoginForm';
+import { MetricsWidget } from '@/features/metrics/components/MetricsWidget';
 import '@xterm/xterm/css/xterm.css';
 import './Terminal.css';
 
@@ -62,6 +63,9 @@ export const Terminal: React.FC<TerminalProps> = ({ className = '' }) => {
         onDisconnect={disconnect}
         onReset={reset}
       />
+
+      {/* Metrics (client-side visualization, no Prometheus needed) */}
+      <MetricsWidget />
 
       {/* Login Overlay */}
       {stage === 'login' && (

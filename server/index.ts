@@ -136,6 +136,18 @@ if (METRICS_ENABLED) {
   });
 }
 
+// Lightweight JSON metrics for client-side visualization
+if (METRICS_ENABLED) {
+  app.get('/api/metrics-json', async (req, res) => {
+    try {
+      const snapshot = await metrics.snapshot();
+      res.json(snapshot);
+    } catch (e) {
+      res.status(500).json({ error: 'Failed to collect metrics' });
+    }
+  });
+}
+
 // API config endpoint for client defaults
 app.get('/api/config', (req, res) => {
   res.json({
