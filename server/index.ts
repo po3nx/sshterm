@@ -88,7 +88,8 @@ if (process.env.NODE_ENV === 'production') {
   if (clientPath) {
     app.use(express.static(clientPath));
 
-    app.get('*', (req, res) => {
+    // Serve index.html for non-API routes only (exclude /api, /metrics, /socket.io)
+    app.get(/^(?!\/(api|metrics|socket\.io)(\/|$)).*/, (req, res) => {
       res.sendFile(join(clientPath, 'index.html'));
     });
 
