@@ -9,15 +9,15 @@ A modern, secure web-based SSH terminal application built with React TypeScript 
 
 ## ✨ Features
 
-- **🔐 Secure SSH Connections**: Full SSH2 protocol support with authentication
-- **🎨 Modern UI**: Clean, responsive React TypeScript interface
-- **⚡ Real-time Terminal**: XTerm.js-powered terminal with full terminal features
-- **🏗️ Clean Architecture**: Well-structured codebase following clean architecture principles
-- **🔄 WebSocket Communication**: Real-time bidirectional communication via Socket.io
-- **📱 Responsive Design**: Works on desktop, tablet, and mobile devices
-- **♿ Accessibility**: WCAG compliant with full keyboard navigation
-- **🎭 Multiple Themes**: Customizable terminal themes and appearance
-- **🔧 TypeScript**: Full type safety throughout the application
+- 🔐 Secure SSH connections (SSH2) with username/password auth
+- ⚡ Real-time terminal via XTerm.js with PTY resize support
+- 🔄 Socket.IO communication with robust dev/prod handling
+- 🧑‍💻 User-selectable SSH Host/Port in login form
+- 🧱 Clean Architecture (domain/application/infrastructure/presentation)
+- 🛡️ Secure defaults: Helmet CSP, no inline scripts in index.html
+- 🌐 Multi-origin CORS support for Socket.IO/Express (comma-separated CLIENT_URL)
+- 🧰 TypeScript end-to-end, strict mode enabled
+- 📱 Responsive UI and accessible interactions
 
 ## 🏗️ Architecture
 
@@ -61,8 +61,8 @@ server/
 
 1. **Clone the repository**
    ```bash
-   git clone <your-repo-url>
-   cd ssh-react-ts
+   git clone https://github.com/po3nx/sshterm.git
+   cd sshterm
    ```
 
 2. **Install dependencies**
@@ -82,7 +82,7 @@ server/
    SSH_PORT=22
    
    # Optional: Server configuration
-   PORT=3001
+   PORT=3000
    CLIENT_URL=http://localhost:3000
    ```
 
@@ -121,12 +121,19 @@ server/
 
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
-| `SSH_HOST` | ✅ | - | SSH server hostname or IP address |
-| `SSH_PORT` | ❌ | `22` | SSH server port |
-| `PORT` | ❌ | `3001` | Backend server port |
-| `HOST` | ❌ | `0.0.0.0` | Backend server host |
-| `CLIENT_URL` | ❌ | `http://localhost:3000` | Frontend URL for CORS |
-| `NODE_ENV` | ❌ | `development` | Environment mode |
+| SSH_HOST | No | - | Default SSH host for prefill (user can override in the form) |
+| SSH_PORT | No | 22 | Default SSH port for prefill (user can override in the form) |
+| PORT | No | 3001 | Backend server port |
+| HOST | No | 0.0.0.0 | Backend bind host (use 127.0.0.1 in production behind NGINX) |
+| CLIENT_URL | No | http://localhost:3000 | Frontend origins for CORS, comma-separated for multiple (e.g. https://app.example.com,https://staging.example.com) |
+| NODE_ENV | No | development | Environment mode |
+
+Client build-time (Vite) env:
+- VITE_SERVER_URL (optional): Backend URL for Socket.IO/API when frontend and backend are on different origins. Example: https://app.example.com
+- VITE_FORCE_POLLING (optional): Set to 1 to force polling transport in dev for diagnosing WS issues.
+
+Server endpoints:
+- GET /api/config returns defaultSSHHost and defaultSSHPort to prefill the login form.
 
 ### SSH Server Requirements
 
@@ -162,12 +169,63 @@ All UI components use CSS modules and can be customized by editing the correspon
 
 ## 🔒 Security Considerations
 
-- **Authentication**: The application requires valid SSH credentials
-- **Transport Security**: Use HTTPS in production for secure credential transmission
-- **Session Management**: Sessions are automatically cleaned up after inactivity
-- **CORS**: Properly configured CORS policies for cross-origin requests
-- **Input Validation**: All user inputs are validated on both client and server
-- **No Credential Storage**: SSH credentials are not stored on the server
+- Authentication: The application requires valid SSH credentials
+- Transport Security: Use HTTPS in production for secure credential transmission
+- Session Management: Sessions are automatically cleaned up after inactivity
+- CORS: Properly configured CORS policies; server supports comma-separated CLIENT_URL
+- Content Security Policy: Helmet enforces script-src 'self'. index.html avoids inline scripts; X-Frame-Options is set via headers, not meta
+- Input Validation: User inputs are validated on both client and server
+- No Credential Storage: SSH credentials are not stored on the server
+
+## 🚀 Production Deployment (NGINX + Node)
+
+Recommended: same-origin deployment behind NGINX
+
+1. Server .env
+```
+NODE_ENV=production
+HOST=127.0.0.1
+PORT=3000
+CLIENT_URL=http://localhost:3000
+# Optional defaults to prefill the form
+SSH_HOST=your-ssh-host.example.com
+SSH_PORT=22
+```
+
+2. Build and start
+```
+npm ci
+npm run build
+NODE_ENV=production HOST=127.0.0.1 PORT=3001 npm start
+```
+
+3. NGINX (essential WS upgrade headers)
+```
+server {
+  listen 443 ssl http2;
+  server_name your.domain.com
+
+  # ssl_certificate / ssl_certificate_key ...
+
+  proxy_read_timeout 600s;
+  proxy_send_timeout 600s;
+
+  location / {
+    proxy_pass http://127.0.0.1:3001;
+    proxy_http_version 1.1;
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+    proxy_set_header Upgrade $http_upgrade;
+    proxy_set_header Connection "upgrade";
+  }
+}
+```
+
+Split-origin option
+- If frontend is served from a different origin, build with: `VITE_SERVER_URL=http://lcoalhost:3000`
+- Set `CLIENT_URL` on the server to your frontend origin(s)
 
 ## 🐳 Docker Support
 
@@ -190,7 +248,7 @@ CMD ["npm", "start"]
 Build and run:
 ```bash
 docker build -t ssh-terminal .
-docker run -p 3001:3001 -e SSH_HOST=your-server.com ssh-terminal
+docker run -p 3000:3000 -e SSH_HOST=your-server.com ssh-terminal
 ```
 
 ## 🧪 Testing
@@ -231,9 +289,11 @@ npm run lint:fix
    - Review SSH server logs for details
 
 3. **WebSocket Connection Issues**
-   - Check if client can reach server on port 3001
-   - Verify CORS configuration in server
-   - Check browser console for WebSocket errors
+   - Prefer same-origin in production (no localhost); use NGINX to proxy to Node
+   - If split origins, set VITE_SERVER_URL to your backend public URL
+   - In dev, use Vite proxy (default) or set VITE_SERVER_URL=http://127.0.0.1:3000
+   - If handshake fails, try VITE_FORCE_POLLING=1 to diagnose WS upgrade issues
+   - Ensure CLIENT_URL includes your frontend origin(s) and NGINX forwards Upgrade/Connection headers
 
 4. **Terminal Display Issues**
    - Clear browser cache and cookies
