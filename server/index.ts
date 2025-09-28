@@ -12,6 +12,7 @@ import { SSHConnectionService } from './infrastructure/ssh/SSHConnectionService'
 import { TerminalService } from './application/services/TerminalService';
 import { AuthenticationService } from './application/services/AuthenticationService';
 import { SocketHandler } from './presentation/socket/SocketHandler';
+import { LoginThrottleService } from './application/services/LoginThrottleService';
 
 // Load environment variables
 config();
@@ -131,6 +132,7 @@ console.log('🔧 Initializing services...');
 const sshConnectionService = new SSHConnectionService();
 const terminalService = new TerminalService(sshConnectionService);
 const authenticationService = new AuthenticationService();
+const loginThrottleService = new LoginThrottleService();
 
 // Start session cleanup for authentication service
 const cleanupTimer = authenticationService.startSessionCleanup();
@@ -140,7 +142,8 @@ const socketHandler = new SocketHandler(
   io,
   sshConnectionService,
   terminalService,
-  authenticationService
+  authenticationService,
+  loginThrottleService
 );
 
 // Error handling middleware

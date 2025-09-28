@@ -17,7 +17,8 @@ export class SocketHandler {
     private io: Server,
     private sshConnectionService: SSHConnectionService,
     private terminalService: TerminalService,
-    private authService: AuthenticationService
+    private authService: AuthenticationService,
+    private throttleService: import('../../application/services/LoginThrottleService').LoginThrottleService
   ) {
     this.setupSocketHandlers();
   }
@@ -42,6 +43,20 @@ export class SocketHandler {
       try {
         console.log(`Login attempt from ${socket.id}: ${username}`);
 
+        // Determine effective host for throttle key
+        const effectiveHost = (host && host.trim()) || process.env.SSH_HOST || '';
+        const clientIp = this.throttleService.getClientIp(socket);
+
+        // Throttle: block if too many failures for this IP+host
+        if (effectiveHost) {
+          const { blocked, retryAfterMs } = this.throttleService.isBlocked(clientIp, effectiveHost);
+          if (blocked) {
+            const waitText = this.throttleService.formatRetryAfter(retryAfterMs);
+            socket.emit('loginResult', { success: false, message: `Too many failed attempts. Try again in ${waitText}.` });
+            return;
+          }
+        }
+
         if (!username || !password) {
           socket.emit('loginResult', { 
             success: false, 
@@ -59,6 +74,14 @@ export class SocketHandler {
             success: false, 
             message: authResult.message || 'Authentication failed' 
           });
+
+          // Register failure for throttle
+          if ((host && host.trim()) || process.env.SSH_HOST) {
+            const h = (host && host.trim()) || process.env.SSH_HOST!;
+            const ip = this.throttleService.getClientIp(socket);
+            this.throttleService.registerFailure(ip, h);
+          }
+
           return;
         }
 
@@ -80,6 +103,10 @@ export class SocketHandler {
           // Create SSH connection
           const sshConnection = await this.sshConnectionService.createConnection(credentials, sshConfig);
 
+          // On success, clear throttle state for this IP+host
+          const ip = this.throttleService.getClientIp(socket);
+          this.throttleService.registerSuccess(ip, sshConfig.host);
+
           // Update session data
           const session = this.sessionData.get(socket.id) || {};
           session.sessionId = authResult.user?.sessionId;
@@ -99,6 +126,10 @@ export class SocketHandler {
             success: false, 
             message: sshError instanceof Error ? sshError.message : 'SSH connection failed' 
           });
+
+          // Register failure for throttle
+          const ip = this.throttleService.getClientIp(socket);
+          this.throttleService.registerFailure(ip, sshConfig.host);
         }
 
       } catch (error) {
