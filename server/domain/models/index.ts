@@ -124,7 +124,9 @@ export class SSHConnection extends EventEmitter {
   }
 
   public isActive(): boolean {
-    return this.connection?.state === 'authenticated' && !this.stream?.destroyed;
+    // Consider the SSH connection active when we have a usable stream that isn't destroyed.
+    // Some environments/drivers may not expose a stable `state === 'authenticated'` value.
+    return !!this.stream && !this.stream.destroyed;
   }
 }
 

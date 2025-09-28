@@ -24,7 +24,8 @@ export class SSHConnectionService implements ISSHConnectionService {
       client.on('ready', () => {
         clearTimeout(timeout);
         
-        client.shell((err: Error | undefined, stream: any) => {
+        // Request an interactive shell with a PTY to support resizing
+        client.shell({ term: 'xterm-256color', cols: 80, rows: 24 }, (err: Error | undefined, stream: any) => {
           if (err) {
             client.end();
             reject(new Error(`Failed to create shell: ${err.message}`));
