@@ -6,6 +6,7 @@ import { join } from 'path';
 import fs from 'fs';
 import cors from 'cors';
 import helmet from 'helmet';
+import { metrics } from './infrastructure/metrics/Metrics';
 
 // Import services
 import { SSHConnectionService } from './infrastructure/ssh/SSHConnectionService';
@@ -67,6 +68,12 @@ app.use(cors({
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
+// Metrics middleware (disabled by default)
+const METRICS_ENABLED = (process.env.METRICS_ENABLED === '1' || process.env.METRICS_ENABLED === 'true');
+if (METRICS_ENABLED) {
+  app.use(metrics.httpMetricsMiddleware());
+}
+
 // Serve static files in production, but only if the client build exists
 if (process.env.NODE_ENV === 'production') {
   // Try typical build locations depending on runtime (built vs ts-node/tsx)
@@ -112,6 +119,21 @@ app.get('/api/status', (req, res) => {
     environment: process.env.NODE_ENV || 'development'
   });
 });
+
+// Metrics endpoint (optional bearer token auth)
+if (METRICS_ENABLED) {
+  app.get('/metrics', async (req, res) => {
+    const token = process.env.METRICS_TOKEN;
+    if (token) {
+      const auth = req.headers['authorization'];
+      if (!auth || !auth.startsWith('Bearer ') || auth.substring(7) !== token) {
+        return res.status(401).send('Unauthorized');
+      }
+    }
+    res.set('Content-Type', metrics.registry.contentType);
+    res.send(await metrics.registry.metrics());
+  });
+}
 
 // API config endpoint for client defaults
 app.get('/api/config', (req, res) => {

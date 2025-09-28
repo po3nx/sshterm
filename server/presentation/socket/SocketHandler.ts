@@ -1,4 +1,5 @@
 import { Server, Socket } from 'socket.io';
+import { metrics } from '../../infrastructure/metrics/Metrics';
 import { Credentials, SSHConfig, TerminalSize } from '../../domain/models';
 import { SSHConnectionService } from '../../infrastructure/ssh/SSHConnectionService';
 import { TerminalService } from '../../application/services/TerminalService';
@@ -29,6 +30,9 @@ export class SocketHandler {
       
       // Initialize session data
       this.sessionData.set(socket.id, {});
+      
+      // Update connected clients gauge
+      try { metrics.socketConnectedClients.set(this.io.sockets.sockets.size); } catch {}
 
       this.setupLoginHandler(socket);
       this.setupInputHandler(socket);
@@ -67,6 +71,9 @@ export class SocketHandler {
 
         // Authenticate user
         const credentials = new Credentials(username, password);
+        // Track attempt
+        try { metrics.sshLoginAttempts.inc({ result: 'attempt' }); } catch {}
+
         const authResult = await this.authService.authenticate(credentials);
 
         if (!authResult.success) {
@@ -74,6 +81,7 @@ export class SocketHandler {
             success: false, 
             message: authResult.message || 'Authentication failed' 
           });
+          try { metrics.sshLoginAttempts.inc({ result: 'failure' }); } catch {}
 
           // Register failure for throttle
           if ((host && host.trim()) || process.env.SSH_HOST) {
@@ -103,9 +111,11 @@ export class SocketHandler {
           // Create SSH connection
           const sshConnection = await this.sshConnectionService.createConnection(credentials, sshConfig);
 
-          // On success, clear throttle state for this IP+host
+          // On success, metrics and throttle reset
+          try { metrics.sshLoginAttempts.inc({ result: 'success' }); } catch {}
           const ip = this.throttleService.getClientIp(socket);
           this.throttleService.registerSuccess(ip, sshConfig.host);
+          try { metrics.sshActiveConnections.set(this.terminalService.getActiveConnectionsCount()); } catch {}
 
           // Update session data
           const session = this.sessionData.get(socket.id) || {};
@@ -126,6 +136,8 @@ export class SocketHandler {
             success: false, 
             message: sshError instanceof Error ? sshError.message : 'SSH connection failed' 
           });
+
+          try { metrics.sshConnectionFailuresTotal.inc(); } catch {}
 
           // Register failure for throttle
           const ip = this.throttleService.getClientIp(socket);
@@ -196,6 +208,12 @@ export class SocketHandler {
       }
 
       this.sessionData.delete(socket.id);
+
+      // Update gauges after disconnect/cleanup
+      try {
+        metrics.socketConnectedClients.set(this.io.sockets.sockets.size);
+        metrics.sshActiveConnections.set(this.terminalService.getActiveConnectionsCount());
+      } catch {}
     });
   }
 
