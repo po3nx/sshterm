@@ -249,9 +249,30 @@ export function useSSHTerminal(): UseSSHTerminalReturn {
     terminalRef.current = terminal;
     fitAddonRef.current = fitAddon;
 
-    // Initial fit and show welcome
-    fitAddon.fit();
-    showWelcomeMessage();
+    // Initial fit and show welcome (defer to ensure DOM is ready)
+    const doInitialFit = () => {
+      try {
+        if (container.isConnected && container.offsetWidth > 0 && container.offsetHeight > 0) {
+          fitAddon.fit();
+        } else {
+          // Try again shortly if dimensions are not ready yet
+          setTimeout(doInitialFit, 16);
+          return;
+        }
+      } catch (e) {
+        // Avoid crashing the app if fit fails in edge cases
+        console.warn('Terminal initial fit failed, retrying shortly...', e);
+        setTimeout(doInitialFit, 16);
+        return;
+      }
+      showWelcomeMessage();
+    };
+
+    if ('requestAnimationFrame' in window) {
+      requestAnimationFrame(() => doInitialFit());
+    } else {
+      setTimeout(doInitialFit, 0);
+    }
 
     // Handle terminal input
     terminal.onData((data: string) => {

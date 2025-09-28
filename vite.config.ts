@@ -20,6 +20,13 @@ export default defineConfig({
       '/socket.io': {
         target: 'http://localhost:3001',
         ws: true,
+        changeOrigin: true,
+        // Ensure websockets stay open through HMR reloads
+        configure: (proxy) => {
+          proxy.on('error', (err) => {
+            console.error('[vite] ws proxy error:', err);
+          });
+        },
       },
       '/api': {
         target: 'http://localhost:3001',
