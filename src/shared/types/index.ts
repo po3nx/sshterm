@@ -2,6 +2,8 @@
 export interface LoginCredentials {
   username: string;
   password: string;
+  host?: string; // Optional, can override server default
+  port?: number; // Optional, defaults to 22 if not provided
 }
 
 export interface LoginResult {

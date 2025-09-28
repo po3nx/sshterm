@@ -37,7 +37,8 @@ export class SocketHandler {
   }
 
   private setupLoginHandler(socket: Socket): void {
-    socket.on('login', async ({ username, password }) => {
+    // Accept host/port overrides from client while preserving env defaults
+    socket.on('login', async ({ username, password, host, port }: { username: string; password: string; host?: string; port?: number }) => {
       try {
         console.log(`Login attempt from ${socket.id}: ${username}`);
 
@@ -61,9 +62,9 @@ export class SocketHandler {
           return;
         }
 
-        // Get SSH configuration from environment
-        const sshHost = process.env.SSH_HOST;
-        const sshPort = parseInt(process.env.SSH_PORT || '22', 10);
+        // Get SSH configuration: prefer client-supplied values, fall back to env
+        const sshHost = (host && host.trim().length > 0) ? host : process.env.SSH_HOST;
+        const sshPort = (typeof port === 'number' && Number.isFinite(port)) ? port : parseInt(process.env.SSH_PORT || '22', 10);
 
         if (!sshHost) {
           socket.emit('loginResult', { 

@@ -30,7 +30,7 @@ export const Terminal: React.FC<TerminalProps> = ({ className = '' }) => {
     }
   }, [setupTerminal]);
 
-  const handleLogin = async (credentials: { username: string; password: string }) => {
+  const handleLogin = async (credentials: { username: string; password: string; host?: string; port?: number }) => {
     try {
       await login(credentials);
     } catch (error) {

@@ -3,6 +3,7 @@ import express from 'express';
 import { createServer } from 'http';
 import { Server } from 'socket.io';
 import { join } from 'path';
+import fs from 'fs';
 import cors from 'cors';
 import helmet from 'helmet';
 
@@ -56,14 +57,30 @@ app.use(cors({
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
-// Serve static files in production
+// Serve static files in production, but only if the client build exists
 if (process.env.NODE_ENV === 'production') {
-  const clientPath = join(__dirname, '../client');
-  app.use(express.static(clientPath));
-  
-  app.get('*', (req, res) => {
-    res.sendFile(join(clientPath, 'index.html'));
-  });
+  // Try typical build locations depending on runtime (built vs ts-node/tsx)
+  const candidates = [
+    join(__dirname, '../client'),          // when running from dist/server
+    join(__dirname, '../../dist/client'),  // when running server from source with built client
+    join(process.cwd(), 'dist/client'),    // fallback to CWD
+  ];
+
+  const clientPath = candidates.find(p => fs.existsSync(join(p, 'index.html')));
+
+  if (clientPath) {
+    app.use(express.static(clientPath));
+
+    app.get('*', (req, res) => {
+      res.sendFile(join(clientPath, 'index.html'));
+    });
+
+    console.log(`🗂  Serving client from: ${clientPath}`);
+  } else {
+    console.warn('⚠️  Client build not found. Skipping static file serving.');
+    console.warn('    Expected index.html in one of:');
+    candidates.forEach(p => console.warn(`     - ${p}`));
+  }
 }
 
 // Health check endpoint
@@ -86,18 +103,17 @@ app.get('/api/status', (req, res) => {
   });
 });
 
-// Environment validation
-const requiredEnvVars = ['SSH_HOST'];
-const missingEnvVars = requiredEnvVars.filter(varName => !process.env[varName]);
+// API config endpoint for client defaults
+app.get('/api/config', (req, res) => {
+  res.json({
+    defaultSSHHost: process.env.SSH_HOST || null,
+    defaultSSHPort: parseInt(process.env.SSH_PORT || '22', 10),
+  });
+});
 
-if (missingEnvVars.length > 0) {
-  console.error('❌ Missing required environment variables:', missingEnvVars.join(', '));
-  console.error('Please create a .env file with the following variables:');
-  console.error('SSH_HOST=your.ssh.host');
-  console.error('SSH_PORT=22 (optional, defaults to 22)');
-  console.error('PORT=3001 (optional, defaults to 3001)');
-  console.error('CLIENT_URL=http://localhost:3000 (optional, for CORS)');
-  process.exit(1);
+// Environment validation: SSH_HOST is now optional (can be set by client form)
+if (!process.env.SSH_HOST) {
+  console.warn('⚠️  No SSH_HOST in environment. Clients must provide SSH host via the login form.');
 }
 
 // Initialize services (Dependency Injection)

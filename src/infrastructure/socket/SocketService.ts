@@ -10,7 +10,9 @@ export class SocketService {
   private socket: Socket<ServerToClientEvents, ClientToServerEvents> | null = null;
   private isConnecting = false;
 
-  constructor(private serverUrl: string = 'http://localhost:3001') {}
+  // If no URL is provided, we'll connect to the same-origin Socket.IO endpoint.
+  // This avoids mixed-content and cross-origin issues in production when served over HTTPS.
+  constructor(private serverUrl?: string) {}
 
   connect(): Promise<Socket<ServerToClientEvents, ClientToServerEvents>> {
     if (this.socket?.connected) {
@@ -35,7 +37,11 @@ export class SocketService {
     return new Promise((resolve, reject) => {
       this.isConnecting = true;
 
-      this.socket = io(this.serverUrl, {
+      const target = this.serverUrl && this.serverUrl.trim().length > 0 ? this.serverUrl : undefined;
+
+      // When target is undefined, Socket.IO connects to the current origin at /socket.io,
+      // which pairs with the Vite dev proxy and production same-origin setup.
+      this.socket = io(target, {
         transports: ['websocket', 'polling'],
         timeout: 10000,
         reconnection: true,

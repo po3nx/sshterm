@@ -41,7 +41,14 @@ export function useSSHTerminal(): UseSSHTerminalReturn {
 
   // Initialize socket service
   useEffect(() => {
-    socketRef.current = new SocketService();
+    // Prefer env-configured server URL when provided; otherwise rely on same-origin
+    // via Vite proxy (dev) or same-origin (prod).
+    const configuredUrl = (typeof import.meta !== 'undefined' && (import.meta as any).env)
+      ? ((import.meta as any).env.VITE_SERVER_URL as string | undefined)
+      : undefined;
+
+    const serverUrl = configuredUrl && configuredUrl.trim().length > 0 ? configuredUrl : undefined;
+    socketRef.current = new SocketService(serverUrl);
     
     return () => {
       socketRef.current?.disconnect();
