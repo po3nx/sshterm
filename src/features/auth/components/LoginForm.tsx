@@ -16,6 +16,7 @@ export const LoginForm: React.FC<LoginFormProps> = ({ onLogin, isLoading, error 
     port: 22,
   });
   const [localError, setLocalError] = useState<string | null>(null);
+  const [showPassword, setShowPassword] = useState(false);
 
   // Fetch default SSH host/port from server .env to prefill the form
   useEffect(() => {
@@ -153,17 +154,32 @@ export const LoginForm: React.FC<LoginFormProps> = ({ onLogin, isLoading, error 
             <label htmlFor="password" className="form-label">
               Password
             </label>
-            <input
-              id="password"
-              type="password"
-              value={credentials.password}
-              onChange={(e) => handleInputChange('password', e.target.value)}
-              className="form-input"
-              placeholder="Enter password"
-              disabled={isLoading}
-              autoComplete="current-password"
-              required
-            />
+            <div className="password-input-wrapper">
+              <input
+                id="password"
+                type={showPassword ? 'text' : 'password'}
+                value={credentials.password}
+                onChange={(e) => handleInputChange('password', e.target.value)}
+                className="form-input password-input"
+                placeholder="Enter password"
+                disabled={isLoading}
+                autoComplete="current-password"
+                required
+                aria-describedby="toggle-password-visibility"
+              />
+              <button
+                id="toggle-password-visibility"
+                type="button"
+                className="toggle-password-btn"
+                onClick={() => setShowPassword((v) => !v)}
+                onMouseDown={(e) => e.preventDefault()}
+                aria-label={showPassword ? 'Hide password' : 'Show password'}
+                title={showPassword ? 'Hide password' : 'Show password'}
+                disabled={isLoading}
+              >
+                {showPassword ? '🙈' : '👁️'}
+              </button>
+            </div>
           </div>
 
           {displayError && (
