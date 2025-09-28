@@ -1,6 +1,6 @@
 module.exports = {
   apps: [{
-    name: 'ssh-terminal',
+    name: 'ssh2',
     script: 'dist/server/index.js',
     instances: 1, // or 'max' for cluster mode
     exec_mode: 'fork',
