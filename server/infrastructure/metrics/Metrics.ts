@@ -78,16 +78,16 @@ class Metrics {
     const safeValue = (v: any, d = 0) => (typeof v === 'number' && isFinite(v) ? v : d);
 
     // Gauges
-    const socketClients = this.socketConnectedClients.get();
-    const sshActive = this.sshActiveConnections.get();
+    const socketClients = await this.socketConnectedClients.get();
+    const sshActive = await this.sshActiveConnections.get();
 
     // Counters
-    const sshFailures = this.sshConnectionFailuresTotal.get();
-    const sshLogin = this.sshLoginAttempts.get();
+    const sshFailures = await this.sshConnectionFailuresTotal.get();
+    const sshLogin = await this.sshLoginAttempts.get();
 
     // HTTP counters
-    const httpReqs = this.httpRequestsTotal.get();
-    const httpDur = this.httpRequestDurationSeconds.get();
+    const httpReqs = await this.httpRequestsTotal.get();
+    const httpDur = await this.httpRequestDurationSeconds.get();
 
     const sumHttpReqsByStatus: Record<string, number> = {};
     for (const v of httpReqs.values) {
