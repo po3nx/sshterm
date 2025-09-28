@@ -1,8 +1,9 @@
 .metrics-widget {
   position: absolute;
-  top: 10px;
-  left: 10px;
-  z-index: 99;
+  top: 52px; /* sit below the connection status (which is at top:10px) */
+  right: 10px;
+  left: auto;
+  z-index: 99; /* below the status (z-index:100) */
   background: rgba(42, 42, 42, 0.9);
   border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: 8px;
@@ -28,8 +29,14 @@
 
 .metrics-grid {
   display: grid;
-  grid-template-columns: repeat(2, 1fr);
+  grid-template-columns: repeat(3, 1fr);
   gap: 8px;
+}
+
+@media (max-width: 1024px) {
+  .metrics-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
 }
 
 .metric-card {
@@ -63,8 +70,8 @@
   .metrics-widget {
     top: auto;
     bottom: 10px;
-    left: 10px;
-    right: auto;
+    right: 10px;
+    left: auto;
     min-width: 180px;
   }
 

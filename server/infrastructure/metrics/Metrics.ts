@@ -1,8 +1,11 @@
 import client, { Counter, Gauge, Histogram, Registry } from 'prom-client';
 import type express from 'express';
+import os from 'os';
 
 class Metrics {
   public readonly registry: Registry;
+  private prevCpu?: NodeJS.CpuUsage;
+  private prevHr?: bigint;
   public readonly httpRequestsTotal: Counter<string>;
   public readonly httpRequestDurationSeconds: Histogram<string>;
   public readonly socketConnectedClients: Gauge<string>;
@@ -77,6 +80,22 @@ class Metrics {
   public async snapshot() {
     const safeValue = (v: any, d = 0) => (typeof v === 'number' && isFinite(v) ? v : d);
 
+    // Process/system stats
+    const mem = process.memoryUsage();
+    const uptime = process.uptime();
+    const load = os.loadavg();
+    const totalMem = os.totalmem();
+    const freeMem = os.freemem();
+    const usedMem = totalMem - freeMem;
+
+    const nowHr = process.hrtime.bigint();
+    const cpu = process.cpuUsage(this.prevCpu);
+    const elapsedSec = this.prevHr ? Number(nowHr - this.prevHr) / 1e9 : 0;
+    const cores = Math.max(1, os.cpus()?.length || 1);
+    const cpuPercent = elapsedSec > 0 ? Math.min(100, Math.max(0, ((cpu.user + cpu.system) / 1e6) / elapsedSec / cores * 100)) : 0;
+    this.prevCpu = process.cpuUsage();
+    this.prevHr = nowHr;
+
     // Gauges
     const socketClients = await this.socketConnectedClients.get();
     const sshActive = await this.sshActiveConnections.get();
@@ -123,6 +142,22 @@ class Metrics {
         sumSeconds: httpDurationSum,
         avgSeconds: httpDurationCount > 0 ? httpDurationSum / httpDurationCount : 0,
       },
+      processMemory: {
+        rssBytes: safeValue(mem.rss, 0),
+        heapUsedBytes: safeValue(mem.heapUsed, 0),
+        heapTotalBytes: safeValue(mem.heapTotal, 0),
+        externalBytes: safeValue((mem as any).external, 0),
+        arrayBuffersBytes: safeValue((mem as any).arrayBuffers, 0),
+      },
+      processUptimeSeconds: uptime,
+      processCpuPercent: Number(cpuPercent.toFixed(1)),
+      systemMemory: {
+        totalBytes: totalMem,
+        freeBytes: freeMem,
+        usedBytes: usedMem,
+        usedPercent: Number(((usedMem / totalMem) * 100).toFixed(1)),
+      },
+      systemLoadAvg: load,
       timestamp: new Date().toISOString(),
     };
   }

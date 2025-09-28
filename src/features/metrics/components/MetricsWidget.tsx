@@ -8,6 +8,11 @@ interface Snapshot {
   sshLoginAttempts: { attempt: number; success: number; failure: number };
   httpRequestsTotalByStatus: Record<string, number>;
   httpRequestDuration: { count: number; sumSeconds: number; avgSeconds: number };
+  processMemory: { rssBytes: number; heapUsedBytes: number; heapTotalBytes: number };
+  processUptimeSeconds: number;
+  processCpuPercent: number;
+  systemMemory: { totalBytes: number; freeBytes: number; usedBytes: number; usedPercent: number };
+  systemLoadAvg: number[];
   timestamp: string;
 }
 
@@ -60,6 +65,14 @@ export const MetricsWidget: React.FC = () => {
         <div className="metric-card">
           <div className="metric-label">SSH Active</div>
           <div className="metric-value">{data?.sshActiveConnections ?? 0}</div>
+        </div>
+        <div className="metric-card">
+          <div className="metric-label">CPU (%)</div>
+          <div className="metric-value">{(data?.processCpuPercent ?? 0).toFixed(0)}</div>
+        </div>
+        <div className="metric-card">
+          <div className="metric-label">Mem (MB)</div>
+          <div className="metric-value">{(((data?.processMemory.rssBytes ?? 0) / (1024 * 1024)) || 0).toFixed(0)}</div>
         </div>
         <div className="metric-card">
           <div className="metric-label">Login ✓/✗</div>
