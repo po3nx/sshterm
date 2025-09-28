@@ -182,7 +182,9 @@ export class SocketHandler {
 
     const handleDisconnect = () => {
       console.log(`SSH connection disconnected: ${connectionId}`);
-      socket.emit('disconnect');
+      // Do not emit the reserved 'disconnect' event manually.
+      // Optionally inform client via a normal channel, then close the socket.
+      socket.emit('error', 'SSH session closed');
       socket.disconnect(true);
     };
 
