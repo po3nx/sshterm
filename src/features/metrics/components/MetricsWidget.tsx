@@ -71,7 +71,7 @@ export const MetricsWidget: React.FC = () => {
   return (
     <div className="metrics-widget" role="region" aria-label="Application metrics">
       <div className="metrics-header">
-        <span>📊 Metrics</span>
+        <span>📊 Metrics {isConnected ? '🟢' : '🔴'}</span>
         {error && <span className="metrics-error">{error}</span>}
       </div>
       <div className="metrics-grid">
