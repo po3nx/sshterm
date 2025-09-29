@@ -96,8 +96,15 @@ export class SSHConnectionService implements ISSHConnectionService {
   async closeConnection(connectionId: string): Promise<void> {
     const connection = this.connections.get(connectionId);
     if (connection) {
-      connection.close();
-      this.connections.delete(connectionId);
+      try {
+        // Remove all event listeners to prevent memory leaks
+        connection.removeAllListeners();
+        connection.close();
+      } catch (error) {
+        console.warn(`Error closing connection ${connectionId}:`, error);
+      } finally {
+        this.connections.delete(connectionId);
+      }
     }
   }
 
@@ -119,5 +126,8 @@ export class SSHConnectionService implements ISSHConnectionService {
       .map(id => this.closeConnection(id));
     
     await Promise.all(closePromises);
+    
+    // Force cleanup of the connections map
+    this.connections.clear();
   }
 }

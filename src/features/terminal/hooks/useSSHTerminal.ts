@@ -69,9 +69,13 @@ export function useSSHTerminal(): UseSSHTerminalReturn {
     cleanupFunctionsRef.current.forEach(cleanup => cleanup());
     cleanupFunctionsRef.current = [];
     
-    // Reset terminal
+    // Reset terminal with proper cleanup
     if (terminalRef.current) {
       terminalRef.current.clear();
+      // Force garbage collection of terminal buffers
+      if (typeof (terminalRef.current as any)._core !== 'undefined') {
+        (terminalRef.current as any)._core.buffer.clear();
+      }
       showWelcomeMessage();
     }
   }, []);
@@ -296,7 +300,17 @@ export function useSSHTerminal(): UseSSHTerminalReturn {
     // Cleanup function
     return () => {
       window.removeEventListener('resize', handleResize);
-      terminal.dispose();
+      // More thorough terminal cleanup
+      if (terminal) {
+        try {
+          // Clear any remaining data
+          terminal.clear();
+          // Dispose of terminal properly
+          terminal.dispose();
+        } catch (e) {
+          console.warn('Terminal disposal error:', e);
+        }
+      }
       terminalRef.current = null;
       fitAddonRef.current = null;
     };

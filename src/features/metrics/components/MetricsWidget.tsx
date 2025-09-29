@@ -23,24 +23,44 @@ export const MetricsWidget: React.FC = () => {
   useEffect(() => {
     let cancelled = false;
     let timer: number | undefined;
+    let retryCount = 0;
+    const maxRetries = 3;
 
     const fetchOnce = async () => {
       try {
-        const res = await fetch('/api/metrics-json', { credentials: 'include' });
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 5000);
+        
+        const res = await fetch('/api/metrics-json', { 
+          credentials: 'include',
+          signal: controller.signal
+        });
+        clearTimeout(timeoutId);
+        
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const json = (await res.json()) as Snapshot;
         if (!cancelled) {
           setData(json);
           setError(null);
+          retryCount = 0; // Reset retry count on success
         }
       } catch (e: any) {
-        if (!cancelled) setError(e?.message || 'Failed to load metrics');
+        if (!cancelled) {
+          retryCount++;
+          if (retryCount < maxRetries) {
+            setError(`Retrying... (${retryCount}/${maxRetries})`);
+          } else {
+            setError(e?.message || 'Failed to load metrics');
+          }
+        }
       }
     };
 
     const loop = async () => {
       await fetchOnce();
-      timer = window.setTimeout(loop, 5000);
+      // Increase interval when there are errors to reduce server load
+      const interval = retryCount > 0 ? 15000 : 10000;
+      timer = window.setTimeout(loop, interval);
     };
 
     loop();
