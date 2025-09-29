@@ -50,12 +50,30 @@ export interface TerminalMessage {
   timestamp: Date;
 }
 
+// Metrics types
+export interface MetricsSnapshot {
+  socketConnectedClients: number;
+  sshActiveConnections: number;
+  sshConnectionFailuresTotal: number;
+  sshLoginAttempts: { attempt: number; success: number; failure: number };
+  httpRequestsTotalByStatus: Record<string, number>;
+  httpRequestDuration: { count: number; sumSeconds: number; avgSeconds: number };
+  processMemory: { rssBytes: number; heapUsedBytes: number; heapTotalBytes: number };
+  processUptimeSeconds: number;
+  processCpuPercent: number;
+  systemMemory: { totalBytes: number; freeBytes: number; usedBytes: number; usedPercent: number };
+  systemLoadAvg: number[];
+  timestamp: string;
+  error?: string;
+}
+
 // Socket events
 export interface ServerToClientEvents {
   loginResult: (result: LoginResult) => void;
   output: (data: string) => void;
   disconnect: () => void;
   error: (error: string) => void;
+  metrics_data: (snapshot: MetricsSnapshot) => void;
 }
 
 export interface ClientToServerEvents {
@@ -63,6 +81,8 @@ export interface ClientToServerEvents {
   input: (data: string) => void;
   resize: (size: TerminalSize) => void;
   disconnect: () => void;
+  subscribe_metrics: () => void;
+  unsubscribe_metrics: () => void;
 }
 
 // Application states

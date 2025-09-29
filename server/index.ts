@@ -202,6 +202,7 @@ const gracefulShutdown = async (signal: string) => {
       try {
         // Clean up resources
         clearInterval(cleanupTimer);
+        socketHandler.stopMetricsBroadcast();
         await terminalService.closeAllConnections();
         console.log('🧹 Cleaned up resources');
         

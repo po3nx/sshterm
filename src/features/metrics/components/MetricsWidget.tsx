@@ -1,73 +1,70 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
+import { io, Socket } from 'socket.io-client';
+import { MetricsSnapshot, ServerToClientEvents, ClientToServerEvents } from '@/shared/types';
 import './MetricsWidget.css';
 
-interface Snapshot {
-  socketConnectedClients: number;
-  sshActiveConnections: number;
-  sshConnectionFailuresTotal: number;
-  sshLoginAttempts: { attempt: number; success: number; failure: number };
-  httpRequestsTotalByStatus: Record<string, number>;
-  httpRequestDuration: { count: number; sumSeconds: number; avgSeconds: number };
-  processMemory: { rssBytes: number; heapUsedBytes: number; heapTotalBytes: number };
-  processUptimeSeconds: number;
-  processCpuPercent: number;
-  systemMemory: { totalBytes: number; freeBytes: number; usedBytes: number; usedPercent: number };
-  systemLoadAvg: number[];
-  timestamp: string;
-}
-
 export const MetricsWidget: React.FC = () => {
-  const [data, setData] = useState<Snapshot | null>(null);
+  const [data, setData] = useState<MetricsSnapshot | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [isConnected, setIsConnected] = useState(false);
+  const socketRef = useRef<Socket<ServerToClientEvents, ClientToServerEvents> | null>(null);
 
   useEffect(() => {
-    let cancelled = false;
-    let timer: number | undefined;
-    let retryCount = 0;
-    const maxRetries = 3;
+    // Create socket connection for metrics only
+    const configuredUrl = (typeof import.meta !== 'undefined' && (import.meta as any).env)
+      ? ((import.meta as any).env.VITE_SERVER_URL as string | undefined)
+      : undefined;
 
-    const fetchOnce = async () => {
-      try {
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 5000);
-        
-        const res = await fetch('/api/metrics-json', { 
-          credentials: 'include',
-          signal: controller.signal
-        });
-        clearTimeout(timeoutId);
-        
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const json = (await res.json()) as Snapshot;
-        if (!cancelled) {
-          setData(json);
-          setError(null);
-          retryCount = 0; // Reset retry count on success
-        }
-      } catch (e: any) {
-        if (!cancelled) {
-          retryCount++;
-          if (retryCount < maxRetries) {
-            setError(`Retrying... (${retryCount}/${maxRetries})`);
-          } else {
-            setError(e?.message || 'Failed to load metrics');
-          }
-        }
+    const serverUrl = configuredUrl && configuredUrl.trim().length > 0 ? configuredUrl : undefined;
+    
+    const socket = io(serverUrl, {
+      transports: ['websocket', 'polling'],
+      timeout: 10000,
+      reconnection: true,
+      reconnectionAttempts: 3,
+      reconnectionDelay: 2000,
+    }) as Socket<ServerToClientEvents, ClientToServerEvents>;
+
+    socketRef.current = socket;
+
+    // Socket event handlers
+    socket.on('connect', () => {
+      console.log('Metrics socket connected');
+      setIsConnected(true);
+      setError(null);
+      
+      // Subscribe to metrics updates
+      socket.emit('subscribe_metrics');
+    });
+
+    socket.on('disconnect', () => {
+      console.log('Metrics socket disconnected');
+      setIsConnected(false);
+      setError('Connection lost');
+    });
+
+    socket.on('connect_error', (err) => {
+      console.error('Metrics socket connection error:', err);
+      setIsConnected(false);
+      setError(`Connection error: ${err.message}`);
+    });
+
+    socket.on('metrics_data', (snapshot: MetricsSnapshot) => {
+      if (snapshot.error) {
+        setError(snapshot.error);
+        setData(null);
+      } else {
+        setData(snapshot);
+        setError(null);
       }
-    };
-
-    const loop = async () => {
-      await fetchOnce();
-      // Increase interval when there are errors to reduce server load
-      const interval = retryCount > 0 ? 15000 : 10000;
-      timer = window.setTimeout(loop, interval);
-    };
-
-    loop();
+    });
 
     return () => {
-      cancelled = true;
-      if (timer) window.clearTimeout(timer);
+      if (socket) {
+        socket.emit('unsubscribe_metrics');
+        socket.disconnect();
+      }
+      socketRef.current = null;
     };
   }, []);
 

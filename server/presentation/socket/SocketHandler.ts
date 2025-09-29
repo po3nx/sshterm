@@ -9,10 +9,12 @@ export interface SocketSession {
   sessionId?: string;
   sshConnectionId?: string;
   username?: string;
+  subscribeToMetrics?: boolean;
 }
 
 export class SocketHandler {
   private sessionData = new Map<string, SocketSession>();
+  private metricsTimer: NodeJS.Timeout | null = null;
 
   constructor(
     private io: Server,
@@ -22,6 +24,7 @@ export class SocketHandler {
     private throttleService: import('../../application/services/LoginThrottleService').LoginThrottleService
   ) {
     this.setupSocketHandlers();
+    this.startMetricsBroadcast();
   }
 
   private setupSocketHandlers(): void {
@@ -37,6 +40,7 @@ export class SocketHandler {
       this.setupLoginHandler(socket);
       this.setupInputHandler(socket);
       this.setupResizeHandler(socket);
+      this.setupMetricsHandler(socket);
       this.setupDisconnectHandler(socket);
     });
   }
@@ -189,6 +193,48 @@ export class SocketHandler {
     });
   }
 
+  private setupMetricsHandler(socket: Socket): void {
+    // Handle metrics subscription
+    socket.on('subscribe_metrics', () => {
+      const session = this.sessionData.get(socket.id);
+      if (session) {
+        session.subscribeToMetrics = true;
+        console.log(`Client ${socket.id} subscribed to metrics`);
+        
+        // Send initial metrics snapshot
+        this.sendMetricsToClient(socket);
+      }
+    });
+
+    // Handle metrics unsubscription
+    socket.on('unsubscribe_metrics', () => {
+      const session = this.sessionData.get(socket.id);
+      if (session) {
+        session.subscribeToMetrics = false;
+        console.log(`Client ${socket.id} unsubscribed from metrics`);
+      }
+    });
+  }
+
+  private async sendMetricsToClient(socket: Socket): Promise<void> {
+    try {
+      // Only send metrics if enabled and client is subscribed
+      const session = this.sessionData.get(socket.id);
+      if (!session?.subscribeToMetrics) return;
+
+      const METRICS_ENABLED = (process.env.METRICS_ENABLED === '1' || process.env.METRICS_ENABLED === 'true');
+      if (!METRICS_ENABLED) {
+        socket.emit('metrics_data', { error: 'Metrics disabled' });
+        return;
+      }
+
+      const snapshot = await metrics.snapshot();
+      socket.emit('metrics_data', snapshot);
+    } catch (error) {
+      socket.emit('metrics_data', { error: 'Failed to collect metrics' });
+    }
+  }
+
   private setupDisconnectHandler(socket: Socket): void {
     socket.on('disconnect', async () => {
       console.log(`Client disconnected: ${socket.id}`);
@@ -255,12 +301,56 @@ export class SocketHandler {
     });
   }
 
+  private startMetricsBroadcast(): void {
+    const METRICS_ENABLED = (process.env.METRICS_ENABLED === '1' || process.env.METRICS_ENABLED === 'true');
+    if (!METRICS_ENABLED) return;
+
+    // Broadcast metrics every 10 seconds to subscribed clients
+    this.metricsTimer = setInterval(async () => {
+      await this.broadcastMetrics();
+    }, 10000);
+  }
+
+  private async broadcastMetrics(): Promise<void> {
+    try {
+      // Get all subscribed clients
+      const subscribedClients = Array.from(this.sessionData.entries())
+        .filter(([_, session]) => session.subscribeToMetrics)
+        .map(([socketId]) => socketId);
+
+      if (subscribedClients.length === 0) return;
+
+      const snapshot = await metrics.snapshot();
+      
+      // Send to all subscribed clients
+      subscribedClients.forEach(socketId => {
+        const socket = this.io.sockets.sockets.get(socketId);
+        if (socket) {
+          socket.emit('metrics_data', snapshot);
+        }
+      });
+    } catch (error) {
+      console.warn('Failed to broadcast metrics:', error);
+    }
+  }
+
+  public stopMetricsBroadcast(): void {
+    if (this.metricsTimer) {
+      clearInterval(this.metricsTimer);
+      this.metricsTimer = null;
+    }
+  }
+
   public getStats() {
+    const subscribedToMetrics = Array.from(this.sessionData.values())
+      .filter(session => session.subscribeToMetrics).length;
+    
     return {
       connectedClients: this.io.sockets.sockets.size,
       activeSessions: this.sessionData.size,
       activeSSHConnections: this.terminalService.getActiveConnectionsCount(),
-      activeAuthSessions: this.authService.getActiveSessionsCount()
+      activeAuthSessions: this.authService.getActiveSessionsCount(),
+      metricsSubscribers: subscribedToMetrics
     };
   }
 }
