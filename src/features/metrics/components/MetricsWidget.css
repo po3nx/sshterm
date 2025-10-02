@@ -68,14 +68,14 @@
 
 @media (max-width: 768px) {
   .metrics-widget {
-    top: auto;
-    bottom: 10px;
+    top: 52px; /* keep below the connection status on mobile too */
+    bottom: auto;
     right: 10px;
     left: auto;
     min-width: 180px;
   }
 
   .metrics-grid {
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: repeat(2, 1fr);
   }
 }
