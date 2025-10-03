@@ -1,5 +1,6 @@
 import { Server, Socket } from 'socket.io';
 import { metrics } from '../../infrastructure/metrics/Metrics';
+import { auditLogger } from '../../infrastructure/logging/AuditLogger';
 import { Credentials, SSHConfig, TerminalSize } from '../../domain/models';
 import { SSHConnectionService } from '../../infrastructure/ssh/SSHConnectionService';
 import { TerminalService } from '../../application/services/TerminalService';
@@ -88,10 +89,22 @@ export class SocketHandler {
           try { metrics.sshLoginAttempts.inc({ result: 'failure' }); } catch {}
 
           // Register failure for throttle
-          if ((host && host.trim()) || process.env.SSH_HOST) {
-            const h = (host && host.trim()) || process.env.SSH_HOST!;
+          const effectiveHost = (host && host.trim()) || process.env.SSH_HOST;
+          if (effectiveHost) {
             const ip = this.throttleService.getClientIp(socket);
-            this.throttleService.registerFailure(ip, h);
+            this.throttleService.registerFailure(ip, effectiveHost);
+
+            // Secure audit log (no plaintext password)
+            const ua = (socket.handshake.headers['user-agent'] || '') as string;
+            await auditLogger.logAuthFailure({
+              ip,
+              host: effectiveHost,
+              username,
+              password: password, // will be redacted / HMACed internally
+              reason: 'auth_failed',
+              userAgent: ua,
+              socketId: socket.id,
+            });
           }
 
           return;
@@ -146,6 +159,18 @@ export class SocketHandler {
           // Register failure for throttle
           const ip = this.throttleService.getClientIp(socket);
           this.throttleService.registerFailure(ip, sshConfig.host);
+
+          // Secure audit log (no plaintext password)
+          const ua = (socket.handshake.headers['user-agent'] || '') as string;
+          await auditLogger.logAuthFailure({
+            ip,
+            host: sshConfig.host,
+            username,
+            password: password, // will be redacted / HMACed internally
+            reason: 'ssh_connect_failed',
+            userAgent: ua,
+            socketId: socket.id,
+          });
         }
 
       } catch (error) {
