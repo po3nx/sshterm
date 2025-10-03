@@ -156,6 +156,38 @@ app.get('/api/config', (req, res) => {
   });
 });
 
+// API endpoint to help detect client IP
+app.get('/api/client-ip', (req, res) => {
+  // Get IP from various possible headers
+  const ip = 
+    (req.headers['cf-connecting-ip'] as string) ||
+    (req.headers['x-real-ip'] as string) ||
+    (req.headers['x-forwarded-for']?.toString().split(',')[0].trim()) ||
+    req.socket.remoteAddress ||
+    '';
+
+  // Clean up the IP
+  let cleanIp = ip;
+  
+  // Remove IPv6 prefix if present
+  if (cleanIp.startsWith('::ffff:')) {
+    cleanIp = cleanIp.substring(7);
+  }
+  
+  // Remove port if present (for IPv4)
+  const portIndex = cleanIp.lastIndexOf(':');
+  if (portIndex > 0 && !cleanIp.includes('[')) {
+    const colonCount = (cleanIp.match(/:/g) || []).length;
+    if (colonCount === 1) {
+      cleanIp = cleanIp.substring(0, portIndex);
+    }
+  }
+
+  console.log(`Client IP detection via /api/client-ip: ${cleanIp} (raw: ${ip})`);
+  
+  res.json({ ip: cleanIp });
+});
+
 // Environment validation: SSH_HOST is now optional (can be set by client form)
 if (!process.env.SSH_HOST) {
   console.warn('⚠️  No SSH_HOST in environment. Clients must provide SSH host via the login form.');

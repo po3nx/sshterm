@@ -4,6 +4,7 @@ export interface LoginCredentials {
   password: string;
   host?: string; // Optional, can override server default
   port?: number; // Optional, defaults to 22 if not provided
+  clientIp?: string; // Client's public IP address (detected client-side)
 }
 
 export interface LoginResult {

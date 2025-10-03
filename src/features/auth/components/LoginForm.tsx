@@ -1,5 +1,6 @@
 import React, { useState, useCallback, useEffect } from 'react';
 import type { LoginCredentials } from '@/shared/types';
+import { detectClientPublicIP } from '@/utils/ipDetection';
 import './LoginForm.css';
 
 interface LoginFormProps {
@@ -71,7 +72,16 @@ export const LoginForm: React.FC<LoginFormProps> = ({ onLogin, isLoading, error 
     setLocalError(null);
     
     try {
-      await onLogin(credentials);
+      // Detect client's public IP before login
+      const clientIp = await detectClientPublicIP();
+      
+      // Include the detected IP in the login credentials
+      const credentialsWithIp: LoginCredentials = {
+        ...credentials,
+        clientIp
+      };
+      
+      await onLogin(credentialsWithIp);
     } catch (error) {
       // Error handling is done by the parent component/hook
     }

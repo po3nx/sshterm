@@ -17,6 +17,10 @@ export class LoginThrottleService {
     this.windowMs = options?.windowMs ?? parseInt(process.env.LOGIN_WINDOW_MS || String(10 * 60 * 1000), 10); // 10 minutes
   }
 
+  /**
+   * @deprecated Use client-provided IP instead. This server-side detection often returns localhost/proxy IPs.
+   * Kept for backward compatibility only.
+   */
   public getClientIp(socket: Socket): string {
     const headerIp = this.getIpFromHeaders(socket);
     if (headerIp) return headerIp;
@@ -27,6 +31,16 @@ export class LoginThrottleService {
       '';
 
     return this.normalizeIp(fallback);
+  }
+  
+  /**
+   * Get a fallback IP from socket for cases where client doesn't provide one.
+   * This will often be a proxy/localhost IP and should only be used as last resort.
+   */
+  public getFallbackIp(socket: Socket): string {
+    // Simple fallback - just get the socket address without complex header parsing
+    const address = socket.handshake.address || socket.conn?.remoteAddress || '127.0.0.1';
+    return this.normalizeIp(address.toString());
   }
 
   private getIpFromHeaders(socket: Socket): string | undefined {

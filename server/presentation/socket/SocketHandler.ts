@@ -48,17 +48,29 @@ export class SocketHandler {
 
   private setupLoginHandler(socket: Socket): void {
     // Accept host/port overrides from client while preserving env defaults
-    socket.on('login', async ({ username, password, host, port }: { username: string; password: string; host?: string; port?: number }) => {
+    socket.on('login', async ({ username, password, host, port, clientIp }: { username: string; password: string; host?: string; port?: number; clientIp?: string }) => {
       try {
         console.log(`Login attempt from ${socket.id}: ${username}`);
 
         // Determine effective host for throttle key
         const effectiveHost = (host && host.trim()) || process.env.SSH_HOST || '';
-        const clientIp = this.throttleService.getClientIp(socket);
+        
+        // IP Detection Strategy:
+        // 1. Use client-provided IP if it's a valid public IP (most reliable for audit logging)
+        // 2. Fall back to simple socket address (may be localhost/proxy but at least consistent)
+        let clientIpAddress: string;
+        if (clientIp && this.isValidPublicIP(clientIp)) {
+          clientIpAddress = clientIp;
+          console.log(`Using client-provided public IP for ${username}: ${clientIpAddress}`);
+        } else {
+          // Use simple fallback - don't try complex header parsing that often fails
+          clientIpAddress = this.throttleService.getFallbackIp(socket);
+          console.log(`Using fallback IP for ${username}: ${clientIpAddress} (client IP was: ${clientIp || 'not provided'})`);
+        }
 
         // Throttle: block if too many failures for this IP+host
         if (effectiveHost) {
-          const { blocked, retryAfterMs } = this.throttleService.isBlocked(clientIp, effectiveHost);
+          const { blocked, retryAfterMs } = this.throttleService.isBlocked(clientIpAddress, effectiveHost);
           if (blocked) {
             const waitText = this.throttleService.formatRetryAfter(retryAfterMs);
             socket.emit('loginResult', { success: false, message: `Too many failed attempts. Try again in ${waitText}.` });
@@ -91,13 +103,12 @@ export class SocketHandler {
           // Register failure for throttle
           const effectiveHost = (host && host.trim()) || process.env.SSH_HOST;
           if (effectiveHost) {
-            const ip = this.throttleService.getClientIp(socket);
-            this.throttleService.registerFailure(ip, effectiveHost);
+            this.throttleService.registerFailure(clientIpAddress, effectiveHost);
 
             // Secure audit log (no plaintext password)
             const ua = (socket.handshake.headers['user-agent'] || '') as string;
             await auditLogger.logAuthFailure({
-              ip,
+              ip: clientIpAddress,
               host: effectiveHost,
               username,
               password: password, // will be redacted / HMACed internally
@@ -130,8 +141,7 @@ export class SocketHandler {
 
           // On success, metrics and throttle reset
           try { metrics.sshLoginAttempts.inc({ result: 'success' }); } catch {}
-          const ip = this.throttleService.getClientIp(socket);
-          this.throttleService.registerSuccess(ip, sshConfig.host);
+          this.throttleService.registerSuccess(clientIpAddress, sshConfig.host);
           try { metrics.sshActiveConnections.set(this.terminalService.getActiveConnectionsCount()); } catch {}
 
           // Update session data
@@ -157,13 +167,12 @@ export class SocketHandler {
           try { metrics.sshConnectionFailuresTotal.inc(); } catch {}
 
           // Register failure for throttle
-          const ip = this.throttleService.getClientIp(socket);
-          this.throttleService.registerFailure(ip, sshConfig.host);
+          this.throttleService.registerFailure(clientIpAddress, sshConfig.host);
 
           // Secure audit log (no plaintext password)
           const ua = (socket.handshake.headers['user-agent'] || '') as string;
           await auditLogger.logAuthFailure({
-            ip,
+            ip: clientIpAddress,
             host: sshConfig.host,
             username,
             password: password, // will be redacted / HMACed internally
@@ -377,5 +386,49 @@ export class SocketHandler {
       activeAuthSessions: this.authService.getActiveSessionsCount(),
       metricsSubscribers: subscribedToMetrics
     };
+  }
+
+  private isValidPublicIP(ip: string): boolean {
+    // IPv4 pattern check
+    const ipv4Pattern = /^(\d{1,3}\.){3}\d{1,3}$/;
+    if (ipv4Pattern.test(ip)) {
+      const parts = ip.split('.');
+      const isValidFormat = parts.every(part => {
+        const num = parseInt(part, 10);
+        return num >= 0 && num <= 255;
+      });
+      
+      if (!isValidFormat) return false;
+      
+      // Filter out private IPs
+      if (ip.startsWith('10.') || 
+          ip.startsWith('127.') || 
+          ip.startsWith('192.168.') || 
+          ip.startsWith('169.254.')) {
+        return false;
+      }
+      
+      // Check 172.16.0.0 - 172.31.255.255
+      if (ip.startsWith('172.')) {
+        const secondOctet = parseInt(parts[1], 10);
+        if (secondOctet >= 16 && secondOctet <= 31) {
+          return false;
+        }
+      }
+      
+      return true;
+    }
+
+    // IPv6 pattern check (simplified)
+    const ipv6Pattern = /^([0-9a-fA-F]{0,4}:){2,7}[0-9a-fA-F]{0,4}$/;
+    if (ipv6Pattern.test(ip)) {
+      // Filter out loopback and private IPv6
+      if (ip === '::1' || ip.startsWith('fe80:') || ip.startsWith('fc') || ip.startsWith('fd')) {
+        return false;
+      }
+      return true;
+    }
+
+    return false;
   }
 }
