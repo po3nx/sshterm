@@ -30,7 +30,12 @@ export class LoginThrottleService {
   }
 
   private getIpFromHeaders(socket: Socket): string | undefined {
-    const headers = socket.handshake.headers;
+    const headerSources: Array<Record<string, string | string[] | undefined>> = [];
+    if (socket.handshake?.headers) headerSources.push(socket.handshake.headers);
+    if ((socket.request as unknown as { headers?: Record<string, string | string[] | undefined> })?.headers) {
+      headerSources.push((socket.request as unknown as { headers: Record<string, string | string[] | undefined> }).headers);
+    }
+
     const headerOrder = [
       'cf-connecting-ip',
       'true-client-ip',
@@ -40,28 +45,36 @@ export class LoginThrottleService {
       'fastly-client-ip',
     ];
 
-    for (const name of headerOrder) {
-      const ip = this.extractIp(headers[name]);
-      if (ip) return ip;
-    }
+    for (const headers of headerSources) {
+      for (const name of headerOrder) {
+        const ip = this.extractPublicIp(headers[name]);
+        if (ip) return ip;
+      }
 
-    const forwarded = headers['forwarded'];
-    if (forwarded) {
-      const ip = this.extractForwardedIp(forwarded);
-      if (ip) return ip;
+      const forwarded = headers['forwarded'];
+      if (forwarded) {
+        const ip = this.extractForwardedIp(forwarded);
+        if (ip) return ip;
+      }
     }
 
     return undefined;
   }
 
-  private extractIp(value: string | string[] | undefined): string | undefined {
-    if (!value) return undefined;
-    const raw = Array.isArray(value) ? value.find(Boolean) : value;
-    if (!raw) return undefined;
+  private extractPublicIp(value: string | string[] | undefined): string | undefined {
+    const candidates = this.tokenizeIpCandidates(value);
+    for (const candidate of candidates) {
+      const cleaned = this.cleanIpToken(candidate);
+      const normalized = cleaned ? this.normalizeIp(cleaned) : '';
+      if (normalized && this.isPublicIp(normalized)) return normalized;
+    }
 
-    const first = raw.split(',')[0];
-    const cleaned = this.cleanIpToken(first);
-    return cleaned ? this.normalizeIp(cleaned) : undefined;
+    if (candidates.length > 0) {
+      const fallback = this.normalizeIp(this.cleanIpToken(candidates[0]));
+      if (fallback) return fallback;
+    }
+
+    return undefined;
   }
 
   private extractForwardedIp(value: string | string[]): string | undefined {
@@ -73,10 +86,26 @@ export class LoginThrottleService {
       const match = part.match(/for=([^;]+)/i);
       if (match && match[1]) {
         const cleaned = this.cleanIpToken(match[1]);
-        if (cleaned) return this.normalizeIp(cleaned);
+        const normalized = cleaned ? this.normalizeIp(cleaned) : '';
+        if (normalized && this.isPublicIp(normalized)) return normalized;
       }
     }
+
     return undefined;
+  }
+
+  private tokenizeIpCandidates(value: string | string[] | undefined): string[] {
+    if (!value) return [];
+    if (Array.isArray(value)) {
+      return value
+        .filter(Boolean)
+        .flatMap(entry => entry.split(',').map(part => part.trim()))
+        .filter(Boolean);
+    }
+    return value
+      .split(',')
+      .map(part => part.trim())
+      .filter(Boolean);
   }
 
   private cleanIpToken(token: string): string {
@@ -98,19 +127,22 @@ export class LoginThrottleService {
     ip = ip.split(';')[0].trim();
 
     const ipv6PortIndex = ip.indexOf(']:');
-    if (ipv6PortIndex !== -1 && ip.startsWith('[')) {
-      ip = ip.substring(1, ipv6PortIndex);
+    if (ipv6PortIndex !== -1 && ip.includes(':') && ip.startsWith('[')) {
+      ip = ip.substring(0, ipv6PortIndex + 1);
     }
 
     if (/^(\d{1,3}\.){3}\d{1,3}:\d+$/.test(ip)) {
       ip = ip.split(':')[0];
     }
 
+    if (ip.startsWith('[') && ip.endsWith(']')) {
+      ip = ip.substring(1, ip.length - 1);
+    }
+
     return ip;
   }
 
   private normalizeIp(ip: string): string {
-    // Strip IPv6 prefix if present (e.g., ::ffff:127.0.0.1)
     let normalized = ip.trim();
     if (!normalized) return '';
 
@@ -122,7 +154,37 @@ export class LoginThrottleService {
       normalized = normalized.split(':')[0];
     }
 
+    if (normalized.startsWith('[') && normalized.endsWith(']')) {
+      normalized = normalized.substring(1, normalized.length - 1);
+    }
+
     return normalized;
+  }
+
+  private isPublicIp(ip: string): boolean {
+    const lower = ip.toLowerCase();
+    if (!ip || lower === 'unknown' || lower === 'null') return false;
+
+    if (ip.includes(':')) {
+      return !(
+        lower === '::1' ||
+        lower.startsWith('fe80::') ||
+        lower.startsWith('febf::') ||
+        lower.startsWith('fc') ||
+        lower.startsWith('fd')
+      );
+    }
+
+    const parts = ip.split('.').map(Number);
+    if (parts.length !== 4 || parts.some(part => Number.isNaN(part))) return true;
+
+    if (parts[0] === 10) return false;
+    if (parts[0] === 127) return false;
+    if (parts[0] === 169 && parts[1] === 254) return false;
+    if (parts[0] === 172 && parts[1] >= 16 && parts[1] <= 31) return false;
+    if (parts[0] === 192 && parts[1] === 168) return false;
+
+    return true;
   }
 
   private key(ip: string, host: string): string {
