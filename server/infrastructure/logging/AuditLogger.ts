@@ -15,15 +15,14 @@ export interface AuthFailureLog {
 }
 
 export class AuditLogger {
-  private enabled: boolean;
-  private logPath: string;
-  private hashSecret?: string;
+  constructor() {}
 
-  constructor() {
-    this.enabled = process.env.AUDIT_LOG_ENABLED === '1' || process.env.AUDIT_LOG_ENABLED === 'true';
+  private readConfig() {
+    const enabled = process.env.AUDIT_LOG_ENABLED === '1' || process.env.AUDIT_LOG_ENABLED === 'true';
     const configuredPath = process.env.AUDIT_LOG_PATH || 'logs/security.log';
-    this.logPath = isAbsolute(configuredPath) ? configuredPath : resolve(process.cwd(), configuredPath);
-    this.hashSecret = process.env.AUDIT_LOG_HASH_SECRET;
+    const logPath = isAbsolute(configuredPath) ? configuredPath : resolve(process.cwd(), configuredPath);
+    const hashSecret = process.env.AUDIT_LOG_HASH_SECRET;
+    return { enabled, logPath, hashSecret };
   }
 
   private async ensureDirExists(filePath: string) {
@@ -38,10 +37,10 @@ export class AuditLogger {
     return `<redacted:length=${len}>`;
   }
 
-  private hashPassword(pw?: string): string | undefined {
-    if (!pw || !this.hashSecret) return undefined;
+  private hashPassword(pw?: string, secret?: string): string | undefined {
+    if (!pw || !secret) return undefined;
     try {
-      const h = crypto.createHmac('sha256', this.hashSecret).update(pw, 'utf8').digest('hex');
+      const h = crypto.createHmac('sha256', secret).update(pw, 'utf8').digest('hex');
       return h;
     } catch {
       return undefined;
@@ -49,23 +48,24 @@ export class AuditLogger {
   }
 
   async logAuthFailure(entry: Omit<AuthFailureLog, 'ts' | 'passwordRedacted' | 'passwordHash'> & { password?: string }) {
-    if (!this.enabled) return;
+    const cfg = this.readConfig();
+    if (!cfg.enabled) return;
     const record: AuthFailureLog = {
       ts: new Date().toISOString(),
       ip: entry.ip,
       host: entry.host,
       username: entry.username,
       passwordRedacted: this.redactPassword(entry.password),
-      passwordHash: this.hashPassword(entry.password),
+      passwordHash: this.hashPassword(entry.password, cfg.hashSecret),
       reason: entry.reason,
       userAgent: entry.userAgent,
       socketId: entry.socketId,
     };
 
     const line = JSON.stringify(record) + '\n';
-    await this.ensureDirExists(this.logPath);
+    await this.ensureDirExists(cfg.logPath);
     try {
-      await fs.appendFile(this.logPath, line, { encoding: 'utf8' });
+      await fs.appendFile(cfg.logPath, line, { encoding: 'utf8' });
     } catch (err) {
       // Best-effort logging; swallow errors to avoid affecting app flow
     }
